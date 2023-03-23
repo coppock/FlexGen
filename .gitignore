@@ -33,3 +33,10 @@ flexgen/apps/data_wrangle/core
 
 # tmp scripts
 today_job.sh
+
+# virtual environment
+.venv
+
+# HELM benchmark data and output
+data
+benchmark_output
