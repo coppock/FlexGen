@@ -1,6 +1,6 @@
 import collections
 
-Policy = collections.namedtuple('Policy', ['bls', 'wg', 'wc', 'wd', 'cg', 'cc', 'cd', 'hg', 'hc', 'hd'])
+Policy = collections.namedtuple('Policy', ['bls', 'gbs', 'wg', 'wc', 'wd', 'cg', 'cc', 'cd', 'hg', 'hc', 'hd'])
 Architecture = collections.namedtuple('Architecture', ['l', 's', 'n', 'h_1', 'h_2', 'nh'])
 Profile = collections.namedtuple('Profile', ['ctog_bdw', 'gtoc_bdw', 'dtoc_bdw', 'ctod_bdw', 'mm_flops', 'bmm_flops', 'cpu_flops'])
 
