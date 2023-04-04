@@ -28,8 +28,8 @@ def gpu_peak_memory_g(policy, arch):
     
     qkv = policy.gbs * 8 * arch.h_1
     att_1 = policy.cg * policy.gbs *  \
-        (2 * arch.h_1 + 2 * (arch.s + arch.n) * arch.h_1 + 2 * arch.n * arch.h * (arch.s + arch.n))
-    att_2 = policy.cg * policy.gbs * (2 * arch.n * arch.h * (arch.s + arch.n) + 2 * (arch.s + arch.n) * arch.h_1 + 2 * arch.h_1)
+        (2 * arch.h_1 + 2 * (arch.s + arch.n) * arch.h_1 + 2 * arch.nh * (arch.s + arch.n))
+    att_2 = policy.cg * policy.gbs * (2 * arch.nh * (arch.s + arch.n) + 2 * (arch.s + arch.n) * arch.h_1 + 2 * arch.h_1)
     embed = 4 * policy.gbs * arch.h_1
     mlp_1 = 2 * policy.gbs * (arch.h_1 + arch.h_2)
     mlp_2 = 2 * policy.gbs * (arch.h_2 + arch.h_1)
@@ -113,6 +113,6 @@ def search_optimal_policy(arch, prof):
             for v in prob.variables():
                 print(v.name, "=", v.varValue)
 
-arch = Architecture(16, 1024, 1024, 32, 64, 16)
-prof = Profile(1024, 1024, 128, 128, 2048, 1024, 512)
-search_optimal_policy(arch, prof)
+# arch = Architecture(16, 1024, 1024, 32, 64, 16)
+# prof = Profile(1024, 1024, 128, 128, 2048, 1024, 512)
+# search_optimal_policy(arch, prof)
