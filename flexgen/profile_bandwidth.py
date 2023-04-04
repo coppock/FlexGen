@@ -73,8 +73,7 @@ def profile_bandwidth(path):
             cost = np.mean(benchmark_func(func, number=5, repeat=3))
             bandwidth = size / cost / GB
 
-            print(f"size: {size / MB:6.2f} MB, {src}-to-{dst} bandwidth: {bandwidth:.3f} GB/s")
-        print()
+            yield src, dst, size, bandwidth
 
 
 if __name__ == "__main__":
@@ -82,4 +81,7 @@ if __name__ == "__main__":
     parser.add_argument("--offload-path", type=str, default="~/flexgen_offload_dir/tmp.npy")
     args = parser.parse_args()
 
-    profile_bandwidth(os.path.expanduser(args.offload_path))
+    for record in profile_bandwidth(os.path.expanduser(args.offload_path)):
+        src, dst, size, bandwidth = record
+        print(f"size: {size / MB:6.2f} MB, {src}-to-{dst} bandwidth: {bandwidth:.3f} GB/s")
+    print()

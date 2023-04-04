@@ -26,9 +26,10 @@ def bench_matmul():
             cost = np.mean(benchmark_func(func, number=5, repeat=3))
 
             tflops = 2 * n * n * n / cost / 1e12
-            print(f"device: {device}, N: {n}, latency: {cost*1e3:.2f} ms, TFLOPS: {tflops:.3f}")
-        print()
+            yield device, n, cost, tflops
 
 
 if __name__ == "__main__":
-    bench_matmul()
+    for device, n, cost, tflops in bench_matmul():
+        print(f"device: {device}, N: {n}, latency: {cost*1e3:.2f} ms, TFLOPS: {tflops:.3f}")
+    print()
