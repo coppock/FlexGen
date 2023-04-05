@@ -68,29 +68,9 @@ def search_optimal_policy(arch, prof):
             hc = LpVariable("Activation Placement (CPU)", lowBound=0, upBound=1)
             hd = LpVariable("Activation Placement (Disk)", lowBound=0, upBound=1)
 
-            T_pre = LpVariable("Cost (Prefill)")
-            T_gen = LpVariable("Cost (Generate)")
-            gpu_max = LpVariable("GPU Maximum Factor (Prefill)")
-
-            # T_pre.setInitialValue(init_T_pre(arch, bls, gbs))
-            # T_gen.setInitialValue(init_T_gen(arch, bls, gbs))
-            # gpu_max.setInitialValue(init_gpu_max(arch, bls, gbs))
-
-            T_pre.addVariableToConstraints(wc)
-            T_pre.addVariableToConstraints(wd)
-            T_pre.addVariableToConstraints(hc)
-            T_pre.addVariableToConstraints(hd)
-            T_pre.addVariableToConstraints(cc)
-            T_pre.addVariableToConstraints(cd)
-            T_gen.addVariableToConstraints(wc)
-            T_gen.addVariableToConstraints(wd)
-            T_gen.addVariableToConstraints(hc)
-            T_gen.addVariableToConstraints(hd)
-            T_gen.addVariableToConstraints(cg)
-            T_gen.addVariableToConstraints(cc)
-            T_gen.addVariableToConstraints(cd)
-            gpu_max.addVariableToConstraints(wg)
-            gpu_max.addVariableToConstraints(cg)
+            T_pre = LpVariable("Cost (Prefill)", lowBound=0)
+            T_gen = LpVariable("Cost (Generate)", lowBound=0)
+            gpu_max = LpVariable("GPU Maximum Factor (Prefill)", lowBound=0)
 
             print(T_pre, T_gen, gpu_max)
 
@@ -188,6 +168,9 @@ def search_optimal_policy(arch, prof):
 
             for v in prob.variables():
                 print(v.name, "=", v.varValue)
+            
+            print("bls", "=", bls)
+            print("gbs", "=", gbs)
 
 
 arch = Architecture(12, 768, 2048, 768, 3072, 12)
