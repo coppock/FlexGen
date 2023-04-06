@@ -1,0 +1,59 @@
+\* PolicySearch *\
+Minimize
+OBJ: 19.5789473684 Cost_(Generate) + 0.631578947368 Cost_(Prefill)
+Subject To
+_C1: - 509414.7 Activation_Placement_(CPU)
+ - 509414.7 Activation_Placement_(Disk) + Cost_(Prefill)
+ - 482603.4 Weight_Placement_(CPU) - 482603.4 Weight_Placement_(Disk) >= 0
+_C10: - 11139439.6299 Cache_Placement_(CPU)
+ - 11139439.6299 Cache_Placement_(Disk) - 580802.861805 Cache_Placement_(GPU)
+ + Cost_(Generate) >= 5068824.97575
+_C11: GPU_Maximum_Factor_(Prefill) >= 188743680
+_C12: - 471859200 Cache_Placement_(GPU) + GPU_Maximum_Factor_(Prefill) >= 0
+_C13: - 471859200 Cache_Placement_(GPU) + GPU_Maximum_Factor_(Prefill) >= 0
+_C14: GPU_Maximum_Factor_(Prefill) >= 94371840
+_C15: GPU_Maximum_Factor_(Prefill) >= 235929600
+_C16: GPU_Maximum_Factor_(Prefill) >= 235929600
+_C17: - 32243712 Activation_Placement_(GPU) + 381026304 Cache_Placement_(GPU)
+ + GPU_Maximum_Factor_(Prefill) + 141557760 Weight_Placement_(GPU)
+ <= 461373440
+_C18: 14942208 Activation_Placement_(CPU)
+ - 47185920 Activation_Placement_(GPU) + 381026304 Cache_Placement_(CPU)
+ + 169869312 Weight_Placement_(CPU) - 14155776 Weight_Placement_(GPU)
+ <= 68658135040
+_C19: 14942208 Activation_Placement_(Disk) + 381026304 Cache_Placement_(Disk)
+ + 169869312 Weight_Placement_(Disk) <= 549755813888
+_C2: - 620000.4 Activation_Placement_(CPU)
+ - 620000.4 Activation_Placement_(Disk) - 1242422.67656 Cache_Placement_(CPU)
+ - 1242422.67656 Cache_Placement_(Disk) + Cost_(Prefill) >= 0
+_C20: Weight_Placement_(CPU) + Weight_Placement_(Disk)
+ + Weight_Placement_(GPU) = 1
+_C21: Cache_Placement_(CPU) + Cache_Placement_(Disk) + Cache_Placement_(GPU)
+ = 1
+_C22: Activation_Placement_(CPU) + Activation_Placement_(Disk)
+ + Activation_Placement_(GPU) = 1
+_C3: - 42334310.4 Activation_Placement_(Disk) + Cost_(Prefill)
+ - 40106188.8 Weight_Placement_(Disk) >= 0
+_C4: - 312639436.8 Activation_Placement_(Disk)
+ - 626500121.4 Cache_Placement_(Disk) + Cost_(Prefill) >= 0
+_C5: Cost_(Prefill) >= 2883598208.43
+_C6: - 994.950585938 Activation_Placement_(CPU)
+ - 994.950585938 Activation_Placement_(Disk) + Cost_(Generate)
+ - 482603.4 Weight_Placement_(CPU) - 482603.4 Weight_Placement_(Disk) >= 0
+_C7: - 1210.93828125 Activation_Placement_(CPU)
+ - 1210.93828125 Activation_Placement_(Disk) + Cost_(Generate) >= 0
+_C8: - 82684.2 Activation_Placement_(Disk) - 87314515.2 Cache_Placement_(Disk)
+ + Cost_(Generate) - 40106188.8 Weight_Placement_(Disk) >= 0
+_C9: - 610623.9 Activation_Placement_(Disk) - 1221247.8 Cache_Placement_(Disk)
+ + Cost_(Generate) >= 0
+Bounds
+ Activation_Placement_(CPU) <= 1
+ Activation_Placement_(Disk) <= 1
+ Activation_Placement_(GPU) <= 1
+ Cache_Placement_(CPU) <= 1
+ Cache_Placement_(Disk) <= 1
+ Cache_Placement_(GPU) <= 1
+ Weight_Placement_(CPU) <= 1
+ Weight_Placement_(Disk) <= 1
+ Weight_Placement_(GPU) <= 1
+End
