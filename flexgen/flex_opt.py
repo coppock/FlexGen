@@ -911,10 +911,12 @@ class OptLM:
 
     def generation_loop_normal(self):
         for i in range(self.execute_gen_len):
+            # Search policies
             timers("generate").start()
             for k in range(self.num_gpu_batches):
                 self.update_attention_mask(i, k)
             for j in range(self.num_layers):
+                # Check memory capacity, dropping batches if necessary
                 for k in range(self.num_gpu_batches):
                     self.load_weight(i, j, k, overlap=False)
 
