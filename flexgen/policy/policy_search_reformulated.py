@@ -2,6 +2,8 @@ from pulp import *
 from cost_model import *
 from policy_search import cpu_peak_memory_p, disk_peak_memory
 
+from decimal import Decimal
+
 def init_T_pre(arch, bls, gbs):
     w_size = 8 * arch.h_1 ** 2 + 4 * arch.h_1 * arch.h_2
     h_size = 2 * arch.h_1 * bls
@@ -45,14 +47,15 @@ def init_gpu_max(arch, bls, gbs):
     return max(qkv, att_1, att_2, embed, mlp_1, mlp_2)
 
 def search_optimal_policy(arch, prof):
-    # bls_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-    # gbs_list = [4, 8, 16, 32, 48, 60]
-    bls_list = [1]
-    gbs_list = [4]
+    bls_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    gbs_list = [4, 8, 16, 32, 48, 60]
 
-    gpu_mem_capacity = 0
-    cpu_mem_capacity = 0
-    disk_mem_capacity = 0
+    gpu_mem_capacity = 0.5 * (2 ** 30)
+    cpu_mem_capacity = 64 * (2 ** 30)
+    disk_mem_capacity = 512 * (2 ** 30)
+
+    optimal_cost = Decimal('inf')
+    optimal_policy = Policy(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
     for bls in bls_list:
         for gbs in gbs_list:
@@ -71,8 +74,6 @@ def search_optimal_policy(arch, prof):
             T_pre = LpVariable("Cost (Prefill)", lowBound=0)
             T_gen = LpVariable("Cost (Generate)", lowBound=0)
             gpu_max = LpVariable("GPU Maximum Factor (Prefill)", lowBound=0)
-
-            print(T_pre, T_gen, gpu_max)
 
             policy = Policy(bls, gbs, wg, wc, wd, cg, cc, cd, hg, hc, hd)
 
@@ -109,14 +110,13 @@ def search_optimal_policy(arch, prof):
             mlp_1 = 2 * policy.gbs * arch.s * (arch.h_1 + arch.h_2)
             mlp_2 = 2 * policy.gbs * arch.s * (arch.h_1 + arch.h_2)
 
-            gpu_w = 2 * (1 - policy.wg) * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) + \
+            # gpu_max >= qkv, att_1, att_2, embed, mlp_1, mlp_2
+            gpu_peak = gpu_home + 2 * (1 - policy.wg) * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) + \
                 (1 - policy.hg) * 2 * arch.s * arch.h_1 * policy.gbs + \
                 gpu_max
-            
-            gpu_peak = gpu_home + gpu_w
 
             # Optimization
-            prob += T / bls, "Objective Function"
+            prob += (T / bls), "Objective Function"
 
             # Cost constraints
             prob += T_pre >= ctog_pre
@@ -145,34 +145,21 @@ def search_optimal_policy(arch, prof):
             prob += (wg + wc + wd) == 1
             prob += (cg + cc + cd) == 1
             prob += (hg + hc + hd) == 1
-            # prob += wg >= 0
-            # prob += wc >= 0
-            # prob += wd >= 0
-            # prob += cg >= 0
-            # prob += cc >= 0
-            # prob += cd >= 0
-            # prob += hg >= 0
-            # prob += hc >= 0
-            # prob += hd >= 0
-            # prob += wg <= 1
-            # prob += wc <= 1
-            # prob += wd <= 1
-            # prob += cg <= 1
-            # prob += cc <= 1
-            # prob += cd <= 1
-            # prob += hg <= 1
-            # prob += hc <= 1
-            # prob += hd <= 1
             
-            prob.solve()
+            status = prob.solve(PULP_CBC_CMD(msg=0))
 
+            tmp_dict = {}
             for v in prob.variables():
-                print(v.name, "=", v.varValue)
-            
-            print("bls", "=", bls)
-            print("gbs", "=", gbs)
+                tmp_dict[v.name] = v.varValue
 
+            optimal_T = (tmp_dict['Cost_(Prefill)'] * arch.l + tmp_dict['Cost_(Generate)'] * (arch.n - 1) * arch.l)
+            if optimal_T < optimal_cost and status == 1:
+                optimal_cost = optimal_T
+                optimal_policy = Policy(bls, gbs, tmp_dict['Weight_Placement_(GPU)'], tmp_dict['Weight_Placement_(CPU)'], tmp_dict['Weight_Placement_(Disk)'], tmp_dict['Cache_Placement_(GPU)'], tmp_dict['Cache_Placement_(CPU)'], tmp_dict['Cache_Placement_(Disk)'], tmp_dict['Activation_Placement_(GPU)'], tmp_dict['Activation_Placement_(CPU)'], tmp_dict['Activation_Placement_(Disk)'])
+    
+    print(optimal_cost)
+    print(optimal_policy)
 
-arch = Architecture(12, 768, 2048, 768, 3072, 12)
+arch = Architecture(12, 4096, 32, 768, 3072, 12)
 prof = Profile(29.332109968558033, 24.100319935277458, 0.3529573969391976, 0.04779374014020742, 53.061556728960184, 53.061556728960184, 2.766593744737228)
 search_optimal_policy(arch, prof)
