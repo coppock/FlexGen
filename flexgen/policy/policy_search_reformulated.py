@@ -4,13 +4,13 @@ from policy_search import cpu_peak_memory_p, cpu_peak_memory_g, disk_peak_memory
 
 from decimal import Decimal
 
-def search_optimal_policy(arch, prof):
+def search_optimal_policy(arch, prof, gpu_mem, cpu_mem, disk_mem):
     bls_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     gbs_list = [4, 8, 16, 32, 48, 60]
 
-    gpu_mem_capacity = 0.5 * (2 ** 30)
-    cpu_mem_capacity = 64 * (2 ** 30)
-    disk_mem_capacity = 512 * (2 ** 30)
+    gpu_mem_capacity = gpu_mem * (2 ** 30)
+    cpu_mem_capacity = cpu_mem * (2 ** 30)
+    disk_mem_capacity = disk_mem * (2 ** 30)
 
     optimal_cost = Decimal('inf')
     optimal_policy = Policy(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -151,6 +151,6 @@ def search_optimal_policy(arch, prof):
     return optimal_policy
 
 if __name__ == "__main__":
-    arch = Architecture(12, 2048, 32, 768, 3072, 12)
+    arch = Architecture(12, 512, 32, 768, 3072, 12)
     prof = Profile(29.332109968558033, 24.100319935277458, 0.3529573969391976, 0.04779374014020742, 53.061556728960184, 53.061556728960184, 2.766593744737228)
-    search_optimal_policy(arch, prof)
+    search_optimal_policy(arch, prof, 40, 256, 2000)
