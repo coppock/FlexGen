@@ -1,50 +1,8 @@
 from pulp import *
 from cost_model import *
-from policy_search import cpu_peak_memory_p, disk_peak_memory
+from policy_search import cpu_peak_memory_p, cpu_peak_memory_g, disk_peak_memory
 
 from decimal import Decimal
-
-def init_T_pre(arch, bls, gbs):
-    w_size = 8 * arch.h_1 ** 2 + 4 * arch.h_1 * arch.h_2
-    h_size = 2 * arch.h_1 * bls
-    c_size = 4 * arch.h_1 * bls
-
-    ctog_pre = ((0 + 0) * w_size + (0 + 0) * arch.s * h_size) / prof.ctog_bdw
-    gtoc_pre = ((0 + 0) * (arch.s + 1) * c_size + (0 + 0) * arch.s * h_size) / prof.gtoc_bdw
-    dtoc_pre = (0 * w_size + 0 * arch.s * h_size) / prof.dtoc_bdw
-    ctod_pre = (0 * (arch.s + 1) * c_size + 0 * arch.s * h_size) / prof.ctod_bdw
-    comp_pre = ((bls * arch.s * w_size) / prof.mm_flops) + ((arch.s ** 2 * c_size) / prof.bmm_flops)
-
-    return max(ctog_pre, gtoc_pre, dtoc_pre, ctod_pre, comp_pre)
-
-def init_T_gen(arch, bls, gbs):
-    w_size = 8 * arch.h_1 ** 2 + 4 * arch.h_1 * arch.h_2
-    h_size = 2 * arch.h_1 * bls
-    c_size = 4 * arch.h_1 * bls
-
-    ctog_gen = ((0 + 0) * w_size + (0 + 0) * h_size) / prof.ctog_bdw
-    gtoc_gen = (0 + 0) * h_size / prof.gtoc_bdw
-    dtoc_gen = (0 * (arch.s + arch.n / 2) * c_size + 0 * w_size + 0 * h_size) / prof.dtoc_bdw
-    ctod_gen = (0 * c_size + 0 * h_size) / prof.ctod_bdw
-    gpu_comp_gen = (bls * w_size / prof.mm_flops) + (1 * (arch.s + arch.n/2) * c_size / prof.bmm_flops)
-    cpu_comp_gen = (0 + 0) * (arch.s + arch.n/2) * c_size / prof.cpu_flops
-    comp_gen = gpu_comp_gen + cpu_comp_gen
-    
-    return max(ctog_gen, gtoc_gen, dtoc_gen, ctod_gen, comp_gen)
-
-def init_gpu_max(arch, bls, gbs):
-    w_size = 8 * arch.h_1 ** 2 + 4 * arch.h_1 * arch.h_2
-    h_size = 2 * arch.h_1 * bls
-    c_size = 4 * arch.h_1 * bls
-
-    qkv = gbs * 8 * arch.s * arch.h_1
-    att_1 = 1 * gbs * (2 * arch.s * arch.h_1 + 2 * arch.s * arch.h_1 + 2 * arch.nh * (arch.s ** 2))
-    att_2 = 1 * gbs * (2 * arch.nh * (arch.s ** 2) + 2 * arch.s * arch.h_1 + 2 * arch.s * arch.h_1)
-    embed = gbs * 4 * arch.s * arch.h_1
-    mlp_1 = 2 * gbs * arch.s * (arch.h_1 + arch.h_2)
-    mlp_2 = 2 * gbs * arch.s * (arch.h_1 + arch.h_2)
-    
-    return max(qkv, att_1, att_2, embed, mlp_1, mlp_2)
 
 def search_optimal_policy(arch, prof):
     bls_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
@@ -72,8 +30,9 @@ def search_optimal_policy(arch, prof):
             hd = LpVariable("Activation Placement (Disk)", lowBound=0, upBound=1)
 
             T_pre = LpVariable("Cost (Prefill)", lowBound=0)
-            T_gen = LpVariable("Cost (Generate)", lowBound=0)
-            gpu_max = LpVariable("GPU Maximum Factor (Prefill)", lowBound=0)
+            T_gen = LpVariable("Cost (After Prefill)", lowBound=0)
+            gpu_max_p = LpVariable("GPU Maximum Factor (Prefill)", lowBound=0)
+            gpu_max_g = LpVariable("GPU Maximum Factor (After Prefill)", lowBound=0)
 
             policy = Policy(bls, gbs, wg, wc, wd, cg, cc, cd, hg, hc, hd)
 
@@ -99,21 +58,42 @@ def search_optimal_policy(arch, prof):
             T = (T_pre * arch.l + T_gen * (arch.n - 1) * arch.l)
 
             # GPU Peak
-            gpu_home = policy.wg * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) * arch.l + \
+            gpu_home_p = policy.wg * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) * arch.l + \
                 policy.hg * 2 * arch.s * arch.h_1 * policy.bls + \
                 4 * (arch.s + arch.n) * arch.h_1 * policy.cg * policy.bls * arch.l
             
-            qkv = policy.gbs * 8 * arch.s * arch.h_1
-            att_1 = policy.cg * policy.gbs * (2 * arch.s * arch.h_1 + 2 * arch.s * arch.h_1 + 2 * arch.nh * (arch.s ** 2))
-            att_2 = policy.cg * policy.gbs * (2 * arch.nh * (arch.s ** 2) + 2 * arch.s * arch.h_1 + 2 * arch.s * arch.h_1)
-            embed = policy.gbs * 4 * arch.s * arch.h_1
-            mlp_1 = 2 * policy.gbs * arch.s * (arch.h_1 + arch.h_2)
-            mlp_2 = 2 * policy.gbs * arch.s * (arch.h_1 + arch.h_2)
+            qkv_p = policy.gbs * 8 * arch.s * arch.h_1
+            att_1_p = policy.cg * policy.gbs * (2 * arch.s * arch.h_1 + 2 * arch.s * arch.h_1 + 2 * arch.nh * (arch.s ** 2))
+            att_2_p = policy.cg * policy.gbs * (2 * arch.nh * (arch.s ** 2) + 2 * arch.s * arch.h_1 + 2 * arch.s * arch.h_1)
+            embed_p = policy.gbs * 4 * arch.s * arch.h_1
+            mlp_1_p = 2 * policy.gbs * arch.s * (arch.h_1 + arch.h_2)
+            mlp_2_p = 2 * policy.gbs * arch.s * (arch.h_1 + arch.h_2)
 
             # gpu_max >= qkv, att_1, att_2, embed, mlp_1, mlp_2
-            gpu_peak = gpu_home + 2 * (1 - policy.wg) * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) + \
+            gpu_w_g = 2 * (1 - policy.wg) * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) + \
                 (1 - policy.hg) * 2 * arch.s * arch.h_1 * policy.gbs + \
-                gpu_max
+                gpu_max_p
+
+            gpu_peak_p = gpu_home_p + gpu_w_g
+        
+
+            gpu_home_g = policy.wg * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) * arch.l + \
+                policy.hg * 2 * arch.h_1 * policy.bls + \
+                4 * (arch.s + arch.n) * arch.h_1 * policy.cg * policy.bls * arch.l
+            
+            qkv_g = policy.gbs * 8 * arch.h_1
+            att_1_g = policy.cg * policy.gbs *  \
+                (2 * arch.h_1 + 2 * (arch.s + arch.n) * arch.h_1 + 2 * arch.nh * (arch.s + arch.n))
+            att_2_g = policy.cg * policy.gbs * (2 * arch.nh * (arch.s + arch.n) + 2 * (arch.s + arch.n) * arch.h_1 + 2 * arch.h_1)
+            embed_g = 4 * policy.gbs * arch.h_1
+            mlp_1_g = 2 * policy.gbs * (arch.h_1 + arch.h_2)
+            mlp_2_g = 2 * policy.gbs * (arch.h_2 + arch.h_1)
+
+            gpu_w_g = 2 * (1 - policy.wg) * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) + \
+                (1 - policy.hg) * 2 * arch.s * arch.h_1 * policy.gbs + \
+                gpu_max_g
+
+            gpu_peak_g = gpu_home_g + gpu_w_g
 
             # Optimization
             prob += (T / bls), "Objective Function"
@@ -131,16 +111,24 @@ def search_optimal_policy(arch, prof):
             prob += T_gen >= comp_gen
 
             # GPU constraints   
-            prob += gpu_max >= qkv
-            prob += gpu_max >= att_1
-            prob += gpu_max >= att_2
-            prob += gpu_max >= embed
-            prob += gpu_max >= mlp_1
-            prob += gpu_max >= mlp_2
+            prob += gpu_max_p >= qkv_p
+            prob += gpu_max_p >= att_1_p
+            prob += gpu_max_p >= att_2_p
+            prob += gpu_max_p >= embed_p
+            prob += gpu_max_p >= mlp_1_p
+            prob += gpu_max_p >= mlp_2_p
+            prob += gpu_max_g >= qkv_g
+            prob += gpu_max_g >= att_1_g
+            prob += gpu_max_g >= att_2_g
+            prob += gpu_max_g >= embed_g
+            prob += gpu_max_g >= mlp_1_g
+            prob += gpu_max_g >= mlp_2_g
             
             # Optimization contraints
-            prob += gpu_peak <= gpu_mem_capacity
+            prob += gpu_peak_p <= gpu_mem_capacity
+            prob += gpu_peak_g <= gpu_mem_capacity
             prob += cpu_peak_memory_p(policy, arch) <= cpu_mem_capacity
+            prob += cpu_peak_memory_g(policy, arch) <= cpu_mem_capacity
             prob += disk_peak_memory(policy, arch) <= disk_mem_capacity
             prob += (wg + wc + wd) == 1
             prob += (cg + cc + cd) == 1
@@ -152,14 +140,17 @@ def search_optimal_policy(arch, prof):
             for v in prob.variables():
                 tmp_dict[v.name] = v.varValue
 
-            optimal_T = (tmp_dict['Cost_(Prefill)'] * arch.l + tmp_dict['Cost_(Generate)'] * (arch.n - 1) * arch.l)
+            optimal_T = (tmp_dict['Cost_(Prefill)'] * arch.l + tmp_dict['Cost_(After_Prefill)'] * (arch.n - 1) * arch.l)
             if optimal_T < optimal_cost and status == 1:
                 optimal_cost = optimal_T
                 optimal_policy = Policy(bls, gbs, tmp_dict['Weight_Placement_(GPU)'], tmp_dict['Weight_Placement_(CPU)'], tmp_dict['Weight_Placement_(Disk)'], tmp_dict['Cache_Placement_(GPU)'], tmp_dict['Cache_Placement_(CPU)'], tmp_dict['Cache_Placement_(Disk)'], tmp_dict['Activation_Placement_(GPU)'], tmp_dict['Activation_Placement_(CPU)'], tmp_dict['Activation_Placement_(Disk)'])
     
-    print(optimal_cost)
-    print(optimal_policy)
+    print("Optimal Cost:", optimal_cost)
+    print("Optimal Policy:", optimal_policy)
 
-arch = Architecture(12, 4096, 32, 768, 3072, 12)
-prof = Profile(29.332109968558033, 24.100319935277458, 0.3529573969391976, 0.04779374014020742, 53.061556728960184, 53.061556728960184, 2.766593744737228)
-search_optimal_policy(arch, prof)
+    return optimal_policy
+
+if __name__ == "__main__":
+    arch = Architecture(12, 2048, 32, 768, 3072, 12)
+    prof = Profile(29.332109968558033, 24.100319935277458, 0.3529573969391976, 0.04779374014020742, 53.061556728960184, 53.061556728960184, 2.766593744737228)
+    search_optimal_policy(arch, prof)
