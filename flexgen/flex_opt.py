@@ -909,23 +909,44 @@ class OptLM:
 
         return self.output_ids
 
+    # TODO: Implement this!
+    def get_gpu_memory_usage():
+        pass
+
+    # TODO: Implement this!
+    def get_cpu_memory_usage():
+        pass
+
     def generation_loop_normal(self):
+        # Check memory capacity, dropping batches if necessary
+        # TODO: Read a memory usage file
+        gpu_memory_usage = get_gpu_memory_usage()
+        cpu_memory_usage = get_cpu_memory_usage()
+
+        # Search policy to determine new bls and gbs
+        
+        # Loop generation_length
         for i in range(self.execute_gen_len):
             # Search policies
             timers("generate").start()
+
             for k in range(self.num_gpu_batches):
                 self.update_attention_mask(i, k)
+
+            # Loop layers
             for j in range(self.num_layers):
-                # Check memory capacity, dropping batches if necessary
+                # 
                 for k in range(self.num_gpu_batches):
                     self.load_weight(i, j, k, overlap=False)
 
+                # 
                 for k in range(self.num_gpu_batches):
                     self.load_cache(i, j, k, overlap=False)
                     self.load_hidden(i, j, k)
                     self.compute_layer(i, j, k)
                     self.store_hidden(i, j, k)
                     self.store_cache(i, j, k, overlap=False)
+            
             timers("generate").stop()
 
     def generation_loop_debug_normal(self):
@@ -1043,16 +1064,45 @@ class OptLM:
         # Generate
         for i in range(self.execute_gen_len):
             timers("generate").start()
+
+            # Update attention mask
             for k in range(self.num_gpu_batches):
                 self.update_attention_mask(i, k)
+
+            # Loop layer
             for j in range(self.num_layers):
+
+                # Compute a block with multiple GPU batches
                 for k in range(self.num_gpu_batches):
+                    # # Legacy code
+                    # self.load_weight(i, j+1, k)
+                    # self.load_cache(i, j, k+1)
+                    # self.store_hidden(i, j, k-1)
+                    # self.load_hidden(i, j, k+1)
+                    # self.compute_layer(i, j, k)
+                    # self.store_cache(i, j, k-1)
+
+                    # Code in the paper
+
+                    # Load the weight of next layer
+                    # Only load weight when k = 0
                     self.load_weight(i, j+1, k)
-                    self.load_cache(i, j, k+1)
+
+                    # Store the cache and activation of the prev batch
+                    # Store to output when j is the last layer
+                    # Else, move to home
                     self.store_hidden(i, j, k-1)
-                    self.load_hidden(i, j, k+1)
-                    self.compute_layer(i, j, k)
+                    # i = 0 (Prefill), i != 0 (Decoding)
                     self.store_cache(i, j, k-1)
+
+                    # Load the cache and activation of the next batch
+                    self.load_cache(i, j, k+1)
+                    self.load_hidden(i, j, k+1)
+
+                    # Compute this batch
+                    self.compute_layer(i, j, k)
+                    
+                    # Synchronize all devices
                     self.sync()
             timers("generate").stop()
 
