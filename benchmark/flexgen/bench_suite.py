@@ -180,6 +180,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("suite", type=str, nargs="+")
     parser.add_argument("--log-file", type=str)
+    parser.add_argument("--offload-dir", type=str)
     args = parser.parse_args()
 
     log_file = args.log_file
@@ -191,6 +192,8 @@ if __name__ == "__main__":
             cmd = f"python -m flexgen.flex_opt {config}"
             if log_file:
                 cmd += f" --log-file {args.log_file}"
+            if args.offload_dir:
+                cmd += f" --offload-dir {args.offload_dir}"
             if use_page_maga:
                 cmd = "bash /usr/local/bin/pagecache-management.sh " + cmd
 

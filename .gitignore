@@ -40,3 +40,6 @@ today_job.sh
 # HELM benchmark data and output
 data
 benchmark_output
+
+# FlexGen benchmark runs
+benchmark/flexgen/runs
