@@ -42,4 +42,4 @@ data
 benchmark_output
 
 # FlexGen benchmark runs
-benchmark/flexgen/runs
+runs

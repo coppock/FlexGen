@@ -831,6 +831,7 @@ class OptLM:
                  debug_mode: Optional[str] = None,
                  cut_gen_len: Optional[int] = None,
                  verbose: int = 0):
+        print('Calling generate...')
         task = Task(
             inputs=inputs,
             prompt_len=len(inputs[0]),
@@ -920,8 +921,8 @@ class OptLM:
     def generation_loop_normal(self):
         # Check memory capacity, dropping batches if necessary
         # TODO: Read a memory usage file
-        gpu_memory_usage = get_gpu_memory_usage()
-        cpu_memory_usage = get_cpu_memory_usage()
+        # gpu_memory_usage = get_gpu_memory_usage()
+        # cpu_memory_usage = get_cpu_memory_usage()
 
         # Search policy to determine new bls and gbs
         
@@ -935,7 +936,9 @@ class OptLM:
 
             # Loop layers
             for j in range(self.num_layers):
-                # 
+                if j == 4:
+                    self.num_gpu_batches -= 2
+                # Check memory capacity, dropping batches if necessary
                 for k in range(self.num_gpu_batches):
                     self.load_weight(i, j, k, overlap=False)
 
@@ -1063,6 +1066,10 @@ class OptLM:
 
         # Generate
         for i in range(self.execute_gen_len):
+            print('pcoppock-memory_allocated', torch.cuda.memory_allocated(0))
+            if False:
+                self.num_gpu_batches = 1
+
             timers("generate").start()
 
             # Update attention mask
@@ -1241,6 +1248,8 @@ def run_flexgen(args):
     warmup_inputs = get_test_inputs(32, num_prompts, tokenizer)
     inputs = get_test_inputs(prompt_len, num_prompts, tokenizer)
 
+    print('pcoppock.inputs', inputs)
+
     gpu = TorchDevice("cuda:0")
     cpu = TorchDevice("cpu")
     disk = TorchDisk(args.offload_dir)
@@ -1272,8 +1281,8 @@ def run_flexgen(args):
 
     try:
         print("warmup - generate")
-        output_ids = model.generate(
-            warmup_inputs, max_new_tokens=1, verbose=args.verbose)
+        # output_ids = model.generate(
+        #     warmup_inputs, max_new_tokens=1, verbose=args.verbose)
 
         print("benchmark - generate")
         timers("generate").reset()

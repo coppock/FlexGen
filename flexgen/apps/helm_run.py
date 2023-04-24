@@ -128,7 +128,7 @@ def get_hf_generation_args(request, tokenizer):
     return relevant_raw_request
 
 
-def get_batches(scenario_state, tokenizer, batch_size, pad_to_seq_len):
+def get_batches(scenario_state, tokenizer, pad_to_seq_len):
     prompts = []
     for r in scenario_state.request_states:
         prompts.append(r.request.prompt)
@@ -148,26 +148,37 @@ def get_batches(scenario_state, tokenizer, batch_size, pad_to_seq_len):
         max_seq_len = max(np.sum(input_ids != tokenizer.pad_token_id, axis=1))
 
     print(f"Max sequence length: {max_seq_len}, Pad to sequences length: {pad_to_seq_len}")
+    return input_ids
 
-    # Pad and divide into batches
-    n_prompts = len(prompts)
-    if n_prompts % batch_size != 0:
-        input_ids = np.concatenate((input_ids, np.full((batch_size - n_prompts % batch_size,
-            input_ids.shape[1]), tokenizer.pad_token_id, dtype=input_ids.dtype)))
 
-    num_batches = len(input_ids) // batch_size
-    assert len(input_ids) % batch_size == 0
-    return [
-        {"input_ids": input_ids[i * batch_size: (i+1) * batch_size]}
-        for i in range(num_batches)
-    ]
+def get_next_batch(remaining, batch_size, pad_token_id):
+    if len(remaining) == batch_size:
+        return remaining, None
+    elif len(remaining) < batch_size:
+        return (
+            {'input_ids': np.concatenate((
+                remaining,
+                np.full((
+                        batch_size - len(remaining),
+                        remaining.shape[1],
+                ), pad_token_id, dtype=remaining.dtype),
+            ))},
+            None,
+        )
+    return (
+        {'input_ids': remaining[:batch_size]},
+        remaining[batch_size:],
+    )
 
 
 def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
     generation_args = get_hf_generation_args(
         scenario_state.request_states[0].request, tokenizer)
-    batches = get_batches(scenario_state, tokenizer,
-                          effective_bs, pad_to_seq_len=pad_to_seq_len)
+    batches = get_batches(
+        scenario_state,
+        tokenizer,
+        pad_to_seq_len=pad_to_seq_len,
+    )
 
     # Initialize environment
     env = ExecutionEnv.create(args.offload_dir)
@@ -194,11 +205,22 @@ def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
     print(f"Init weights end. Elapsed: {time.time() - tic:.2f} s", flush=True)
 
     # Generate
-    print(f"Generate begin. #sequences: {len(batches) * effective_bs}")
+    print(f"Generate begin. #sequences: {len(batches)} (padding not included)")
     tic = time.time()
     input_ids_batches = []
     output_ids_batches = []
-    for batch in tqdm(batches):
+    i = 0
+    while batches is not None:
+        if i == 3:
+            effective_bs //= 2
+            model.num_gpu_batches //= 2
+            print('pcoppock-resize', effective_bs, model.num_gpu_batches)
+        batch, batches = get_next_batch(
+            batches,
+            effective_bs,
+            tokenizer.pad_token_id,
+        )
+        print('pcoppock-progress', f'Processing batch of size {effective_bs}...')
         input_ids_tmp = batch["input_ids"]
         output_ids_tmp = model.generate(
             input_ids_tmp,
@@ -208,6 +230,7 @@ def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
             stop=generation_args.get("eos_token_id", None))
         input_ids_batches.append(input_ids_tmp)
         output_ids_batches.append(output_ids_tmp)
+        i += 1
     print(f"Generate end. Elapsed: {time.time() - tic:.2f} s", flush=True)
 
     input_ids = np.concatenate(input_ids_batches)
