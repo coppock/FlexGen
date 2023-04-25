@@ -2,6 +2,8 @@ import time
 
 
 GPU_MEM_FILE_PATH = "/tmp/745-mem-usage"
+# MAX_GPU_MEM = 24 * (2 ** 30)
+MAX_GPU_MEM = 4000000
 
 
 def get_current_gpu_mem():
@@ -30,9 +32,9 @@ def simulate_gpu_memory_utilization(trace_file_path):
 
         before = time.time() / 1000
 
-        while len(trace) > 0 and trace[0][0] == current_second:
+        while len(trace) > 0 and trace[0][0] <= current_second and (current_GPU_memory_utilization + trace[0][2]) <= MAX_GPU_MEM:
             current_GPU_memory_utilization += trace[0][2]
-            working_p.append((trace[0][1], trace[0][2]))
+            working_p.append((current_second + (trace[0][1] - trace[0][0]), trace[0][2]))
             trace = trace[1:]
 
         working_p.sort()
