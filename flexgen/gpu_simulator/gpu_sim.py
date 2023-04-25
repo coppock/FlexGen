@@ -4,6 +4,13 @@ import time
 GPU_MEM_FILE_PATH = "/tmp/745-mem-usage"
 
 
+def get_current_gpu_mem():
+    with open(GPU_MEM_FILE_PATH, "r") as gpu_mem_file:
+        for memory in gpu_mem_file:
+            if memory.strip() != "":
+                return int(memory.strip())
+
+
 def simulate_gpu_memory_utilization(trace_file_path):
     trace = []
 
