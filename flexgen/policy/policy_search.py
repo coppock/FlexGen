@@ -1,5 +1,5 @@
 from pulp import *
-from cost_model import *
+from flexgen.policy.cost_model import *
 
 def gpu_peak_memory_p(policy, arch):
     gpu_home = policy.wg * (8 * (arch.h_1 ** 2) + 4 * arch.h_1 * arch.h_2) * arch.l + \

@@ -1,6 +1,6 @@
 from pulp import *
-from cost_model import *
-from policy_search import cpu_peak_memory_p, cpu_peak_memory_g, disk_peak_memory
+from flexgen.policy.cost_model import *
+from flexgen.policy.policy_search import cpu_peak_memory_p, cpu_peak_memory_g, disk_peak_memory
 
 from decimal import Decimal
 

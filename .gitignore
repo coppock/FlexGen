@@ -17,11 +17,12 @@ dist
 *__pycache__
 *.egg-info
 flexgen/apps/data
-flexgen/apps/runs
-flexgen/apps/benchmark_output
-flexgen/apps/data_wrangle/data
+runs
+benchmark_output
+data
 flexgen/apps/data_wrangle/outputs
 flexgen/apps/data_wrangle/core
+*.pyc
 
 # pickle
 *.pkl
@@ -36,10 +37,3 @@ today_job.sh
 
 # virtual environment
 .venv
-
-# HELM benchmark data and output
-data
-benchmark_output
-
-# FlexGen benchmark runs
-runs

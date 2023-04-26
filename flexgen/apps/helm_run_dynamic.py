@@ -5,6 +5,7 @@ See also: https://crfm.stanford.edu/helm/
 helm package version: 0.2.1
 """
 import argparse
+import configparser
 from dataclasses import asdict, replace
 import json
 import math
@@ -12,7 +13,9 @@ import os
 import time
 
 from flexgen.flex_opt import (Policy, OptLM, ExecutionEnv, CompressionConfig,
-        str2bool)
+        str2bool, get_opt_config)
+from flexgen.policy.policy_search_reformulated import search_optimal_policy
+from flexgen.policy.cost_model import Architecture, Profile
 from helm.benchmark.presentation.run_entry import RunEntry
 from helm.benchmark.run import run_entries_to_run_specs
 from helm.benchmark.run_specs import (ScenarioSpec, RunSpec, get_summarization_adapter_spec,
@@ -201,7 +204,8 @@ def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
 
     print(f"Init weights begin.")
     tic = time.time()
-    model = OptLM(args.model, env, args.path, policy)
+    config = get_opt_config(args.model)
+    model = OptLM(config, env, args.path, policy)
     print(f"Init weights end. Elapsed: {time.time() - tic:.2f} s", flush=True)
 
     # Generate
@@ -210,37 +214,65 @@ def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
     input_ids_batches = []
     output_ids_batches = []
     i = 0
-    
-    for batch in tqdm(batches):
-    # while batches is not None:
+
+    arch = Architecture(
+        config.num_hidden_layers,
+        args.pad_to_seq_len,
+        config.max_seq_len,
+        config.hidden_size,
+        config.ffn_embed_dim,
+        config.n_head,
+    )
+    profile_config = configparser.ConfigParser()
+    profile_config.read(args.profile)
+    prof = Profile(
+        float(profile_config['bandwidth']['c2g']),
+        float(profile_config['bandwidth']['g2c']),
+        float(profile_config['bandwidth']['d2c']),
+        float(profile_config['bandwidth']['c2d']),
+        float(profile_config['matmul']['cuda']),
+        float(profile_config['matmul']['cuda']),
+        float(profile_config['matmul']['cpu']),
+    )
+
+    previous_memory_usage = 0
+
+    # for batch in tqdm(batches):
+    while batches is not None:
         # if i == 3:
         #     effective_bs //= 2
         #     model.num_gpu_batches //= 2
         #     print('pcoppock-resize', effective_bs, model.num_gpu_batches)
-        # batch, batches = get_next_batch(
-        #     batches,
-        #     effective_bs,
-        #     tokenizer.pad_token_id,
-        # )
-        #
-
-        from flexgen.policy.policy_search_reformulated import search_optimal_policy
-        from flexgen.policy.cost_model import Architecture, Profile
-
-        new_arch = Architecture(args.arch[0], args.arch[1], args.arch[2], args.arch[3], args.arch[4], args.arch[5])
-        new_prof = Profile(args.prof[0], args.prof[1], args.prof[2], args.prof[3], args.prof[4], args.prof[5], args.prof[6])
 
         from flexgen.gpu_simulator.gpu_sim import get_current_gpu_mem
+        from flexgen.gpu_simulator.gpu_sim import acquire_lock, release_lock, increase_gpu_mem, decrease_gpu_mem
 
-        new_gpu_mem = get_current_gpu_mem()
-        cpu_mem = 0
-        disk_mem = 0
+        acquire_lock()
+        try:
+            decrease_gpu_mem(previous_memory_usage)
+        finally:
+            release_lock()
+        
+        # Give a chance to other processes
+        time.sleep(3)
 
-        new_policy_subset = search_optimal_policy(new_arch, new_prof, new_gpu_mem, cpu_mem, disk_mem)
+        acquire_lock()
+        try:
+            new_gpu_mem = 20 - (get_current_gpu_mem() / 2**30)
+            cpu_mem = 256
+            disk_mem = 1024
+
+            increase_gpu_mem(int(new_gpu_mem * (2 ** 30)))
+            previous_memory_usage = int(new_gpu_mem * (2 ** 30))
+            print("Current GPU Memory to be used:", new_gpu_mem)
+        finally:
+            release_lock()
+
+        new_policy_subset = search_optimal_policy(arch, prof, new_gpu_mem, cpu_mem, disk_mem)
         new_policy = Policy(new_policy_subset.bls, new_policy_subset.gbs,
-                        new_policy_subset.wg, new_policy_subset.wc,
-                        new_policy_subset.cg, new_policy_subset.cc,
-                        new_policy_subset.hg, new_policy_subset.hc,
+                        int(100 * new_policy_subset.wg), int(100 * new_policy_subset.wc),
+                        int(100 * new_policy_subset.cg), int(100 * new_policy_subset.cc),
+                        int(100 * new_policy_subset.hg), int(100 * new_policy_subset.hc),
                         overlap=True, sep_layer=True, pin_weight=args.pin_weight,
                         cpu_cache_compute=args.cpu_cache_compute, attn_sparsity=1.0,
                         compress_weight=args.compress_weight,
@@ -252,7 +284,14 @@ def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
                             num_bits=4, group_size=64,
                             group_dim=2, symmetric=False))
 
+        del model
         model = OptLM(args.model, env, args.path, new_policy)
+
+        batch, batches = get_next_batch(
+            batches,
+            new_policy_subset.bls * new_policy_subset.gbs,
+            tokenizer.pad_token_id,
+        )
 
         print('pcoppock-progress', f'Processing batch of size {effective_bs}...')
         input_ids_tmp = batch["input_ids"]
@@ -473,16 +512,10 @@ if __name__ == "__main__":
         help="Whether to compress weight.")
     parser.add_argument("--compress-cache", action="store_true",
         help="Whether to compress cache.")
-    
-    # ['l', 's', 'n', 'h_1', 'h_2', 'nh']
-    parser.add_argument("--arch", nargs="+", type=int)
-    # ['ctog_bdw', 'gtoc_bdw', 'dtoc_bdw', 'ctod_bdw', 'mm_flops', 'bmm_flops', 'cpu_flops']
-    parser.add_argument("--prof", nargs="+", type=float)
+    parser.add_argument('--profile', type=str, default='profile.ini')
 
     args = parser.parse_args()
 
     assert len(args.percent) == 6
-    assert len(args.arch) == 6
-    assert len(args.prof) == 7
 
     main(args)
