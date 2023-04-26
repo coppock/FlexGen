@@ -95,7 +95,7 @@ def simulate_gpu_memory_utilization(trace_file_path):
 
         after = time.time() / 1000
         time_difference = after - before
-        time.sleep(1.0 - time_difference)
+        # time.sleep(1.0 - time_difference)
 
         print(current_second, current_GPU_memory_utilization)
 

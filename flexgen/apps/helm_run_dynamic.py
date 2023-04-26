@@ -156,7 +156,7 @@ def get_batches(scenario_state, tokenizer, pad_to_seq_len):
 
 def get_next_batch(remaining, batch_size, pad_token_id):
     if len(remaining) == batch_size:
-        return remaining, None
+        return {'input_ids': remaining}, None
     elif len(remaining) < batch_size:
         return (
             {'input_ids': np.concatenate((
@@ -253,8 +253,8 @@ def execute(scenario_state, tokenizer, effective_bs, pad_to_seq_len):
         finally:
             release_lock()
         
-        # Give a chance to other processes
-        time.sleep(3)
+        # # Give a chance to other processes
+        # time.sleep(3)
 
         acquire_lock()
         try:
